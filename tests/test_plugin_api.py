@@ -140,6 +140,27 @@ class TestProfileIsolation(PluginApiTestCase):
         self.assertIn("AlphaProject", alpha_names)
         self.assertNotIn("RootProject", alpha_names)
 
+    def test_resolves_current_profile_from_process_home_without_query(self):
+        # The gateway strips ?profile= (it routes on it), so the API must resolve
+        # the CURRENT profile from the plugin host's HERMES_HOME when the query
+        # is absent — a named profile that is a subdir of the launch home.
+        prof_dir = Path(self.tmpdir) / "profiles" / "beta"
+        prof_dir.mkdir(parents=True)
+        with self.pdb.connect_closing(db_path=prof_dir / "projects.db") as conn:
+            self.pdb.create_project(conn, name="BetaProject", folders=["/tmp/a"])
+
+        # Point HERMES_HOME at the profile subdir (like the plugin host does).
+        self._old_home = os.environ.get("HERMES_HOME")
+        os.environ["HERMES_HOME"] = str(prof_dir)
+        try:
+            names = [p["name"] for p in self._list()["projects"]]
+        finally:
+            if self._old_home is None:
+                os.environ.pop("HERMES_HOME", None)
+            else:
+                os.environ["HERMES_HOME"] = self._old_home
+        self.assertIn("BetaProject", names)
+
     def test_invalid_profile_name_rejected(self):
         with self.assertRaises(Exception):
             self._list(profile="../../etc")

@@ -93,11 +93,21 @@ def _validate_profile(profile: Optional[str]) -> Optional[str]:
 
 
 def _projects_db_path(profile: Optional[str]) -> Path:
-    """The projects.db path for a profile (None/'default' = root home)."""
-    root = _get_hermes_root()
+    """The projects.db path for the CURRENT profile, or an explicit one.
+
+    The gateway strips the ``?profile=`` query for routing (it is a gateway
+    query key, web_server_plugin_profiles.py:_GATEWAY_QUERY_KEYS), so the
+    request lands in the plugin host of THAT profile — whose context home
+    already points at the right profile directory. Default therefore resolves
+    from ``hermes_constants.get_hermes_home()`` instead of the query.
+    ``profile`` remains an optional override for cross-profile browsing.
+    """
+    from hermes_constants import get_hermes_home
+
     prof = _validate_profile(profile)
     if prof in (None, "default"):
-        return root / "projects.db"
+        return get_hermes_home() / "projects.db"
+    root = _get_hermes_root()
     return root / "profiles" / prof / "projects.db"
 
 
