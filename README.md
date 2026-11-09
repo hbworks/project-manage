@@ -8,9 +8,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| 状態 | 開発中（P0 実装済み・テスト済み。登録済み） |
+| 状態 | 開発中（UI・API・ツールすべて実機確認済み） |
 | version | 0.1.0 |
-| 最終コミット | `2026-11-10 1368915`（feat: P0 全アクション + 25 tests） |
+| 最終コミット | `2026-11-10 b71a027`（fix: API は HERMES_HOME から解決） |
 | 作業ツリー | clean |
 
 ## 実体と登録先
@@ -18,9 +18,10 @@
 | 項目 | 内容 |
 |---|---|
 | 実体パス | `このリポジトリ` |
-| git | 独立リポジトリ（main, 初期コミット済み） |
-| 登録（symlink） | `~/.hermes/profiles/<name>/plugins/project-manage` → 実体 |
-| 有効化 | `config.yaml` の `plugins.enabled` + `platform_toolsets.*`（`hermes plugins enable` で自動設定） |
+| git | 独立リポジトリ（main, コミット済み） |
+| 登録（symlink） | デフォルト `~/.hermes/plugins/` の両方（ゲートウェイはデフォルト root で discovery するため） |
+| 有効化 | `config.yaml` の `plugins.enabled`（`HERMES_HOME=~/.hermes hermes plugins enable` で実施） |
+| Desktop UI | `~/.hermes/desktop-plugins/project-manage/`（Electron が自動コピー） |
 
 > 補足: ツールプラグインはプロファイルごとの `plugins/` symlink が必要（デスクトップ UI プラグインの `~/.hermes/desktop-plugins/` とは別レイヤー。UI を持たない本プラグインは desktop-plugins 未使用）
 
@@ -59,16 +60,14 @@ node --test tests/test_desktop_api.mjs
 
 ## 既知の課題
 
-- ツール名の衝突確認: `toolset="project_manage"` は自分自身の名前。GUI の既存 toolset リスト（`project` 等）と別系統なので衝突しない見込みだが、実機登録時に `hermes tools` で確認する
-- desktop UI の即時反映: DB 書き込み後のサイドバー反映は本体 UI の既存ロジックに依存（SPEC の非目的）
-- Desktop UI は `desktop/plugin.js` を Electron が `~/.hermes/desktop-plugins/project-manage/` へコピーする仕組み。コピー前に設定変更（`plugins.enabled` 等）は不要だが、デスクトップの再起動（または Rescan）が必要
 - GUI の「フォルダを外す」は関連付け解除のみ。ディスク削除は `terminal` の別操作
+- デスクトップアプリ・ゲートウェイ再起動後も動かない場合は、`notes/tech/hermes/2026-11-10-desktop-plugin-pitfalls.md` のデバッグ順序に従う
 
 ## 次の一手
 
-- [ ] デスクトップ再起動後に Folders ページが出るか確認（`~/.hermes/desktop-plugins/project-manage/` にコピーされ、サイドバーに「フォルダ」が出るはず）
-- [ ] 実機確認: `project_manage` ツール + Folders ページの相互反映（GUI で追加 → ツールの list に出る、等）
-- [ ] 必要になったら他プロファイルへ登録拡大（projects.db はプロファイルごと）
+- [ ] 実運用で使ってみて、UI の細部（プロジェクト単体ページへの導線・並び順・ラベル表示）を調整
+- [ ] rename とプライマリ変更を UI に追加（最小版の次）
+- [ ] 必要になったら他プロファイルへ登録拡大（projects.db はプロファイルごと。デフォルト symlink は済み）
 
 ## メモ
 
