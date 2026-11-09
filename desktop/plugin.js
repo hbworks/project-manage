@@ -116,6 +116,9 @@ const t = {
   get pathPlaceholder() { return getLocale() === 'ja' ? '例: /Users/you/dev/repo' : 'e.g. /Users/you/dev/repo' },
   get add() { return getLocale() === 'ja' ? '追加' : 'Add' },
   get remove() { return getLocale() === 'ja' ? '外す' : 'Remove' },
+  get setPrimary() { return getLocale() === 'ja' ? 'プライマリに' : 'Set primary' },
+  get setPrimaryTitle() { return getLocale() === 'ja' ? 'このフォルダをプライマリに設定' : 'Make this the primary folder' },
+  get browse() { return getLocale() === 'ja' ? '選択…' : 'Browse…' },
   get removeConfirm() { return getLocale() === 'ja' ? 'このフォルダをプロジェクトから外しますか？（ディスクのファイルは消えません）' : 'Remove this folder from the project? (files on disk are untouched)' },
   get error() { return getLocale() === 'ja' ? 'エラー' : 'Error' },
   get refresh() { return getLocale() === 'ja' ? '更新' : 'Refresh' },
@@ -168,6 +171,34 @@ function FolderList({ project, onChanged }) {
     }
   }
 
+  const setPrimary = async (path) => {
+    setBusy(true)
+    setErr(null)
+    try {
+      await api(`/projects/${encodeURIComponent(project.id)}/primary?path=${encodeURIComponent(path)}&profile=${encodeURIComponent(project.profile || '')}`, {
+        method: 'PUT'
+      })
+      onChanged()
+    } catch (e) {
+      setErr(String(e.message || e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // OS-native folder picker through the desktop bridge (Electron
+  // showOpenDialog with openDirectory). Falls back to typing a path when the
+  // shell has no native picker (e.g. browser fallback).
+  const browse = async () => {
+    if (typeof window === 'undefined' || !window.hermesDesktop?.selectPaths) return
+    try {
+      const picked = await window.hermesDesktop.selectPaths({ directories: true, multiple: false })
+      if (picked && picked[0]) setPathInput(picked[0])
+    } catch (e) {
+      setErr(String(e.message || e))
+    }
+  }
+
   const folders = project.folders || []
 
   return jsxs('div', {
@@ -190,9 +221,16 @@ function FolderList({ project, onChanged }) {
                 key: f.path,
                 style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid var(--border, rgba(128,128,128,0.2))', fontSize: '13px' },
                 children: [
-                  jsx(Codicon, { name: f.is_primary ? 'star-full' : 'folder', size: '0.9rem', style: { flexShrink: 0 } }),
+                  jsx(Codicon, { name: f.is_primary ? 'star-full' : 'star-outline', size: '0.9rem', style: { flexShrink: 0 } }),
                   jsx('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }, children: f.path }),
-                  f.is_primary ? jsx('span', { style: { fontSize: '11px', opacity: 0.55, flexShrink: 0 }, children: t.primary }) : null,
+                  !f.is_primary ? jsx('button', {
+                    type: 'button',
+                    disabled: busy,
+                    title: t.setPrimaryTitle,
+                    onClick: () => setPrimary(f.path),
+                    style: { flexShrink: 0, background: 'transparent', border: 'none', padding: '2px 6px', fontSize: '12px', cursor: 'pointer', color: 'inherit', opacity: 0.6 },
+                    children: t.setPrimary
+                  }) : jsx('span', { style: { fontSize: '11px', opacity: 0.55, flexShrink: 0 }, children: t.primary }),
                   jsx('button', {
                     type: 'button',
                     disabled: busy,
@@ -215,6 +253,14 @@ function FolderList({ project, onChanged }) {
                 onChange: (e) => setPathInput(e.target.value),
                 onKeyDown: (e) => { if (e.key === 'Enter') void add() },
                 style: { flex: 1, padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--border, rgba(128,128,128,0.4))', background: 'var(--input-background, transparent)', color: 'inherit', fontSize: '13px' }
+              }),
+              jsx('button', {
+                type: 'button',
+                disabled: busy,
+                onClick: () => void browse(),
+                title: t.browse,
+                style: { flexShrink: 0, padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--border, rgba(128,128,128,0.4))', background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: '13px' },
+                children: t.browse
               }),
               jsx('button', {
                 type: 'button', disabled: busy || !pathInput.trim(), onClick: () => void add(),

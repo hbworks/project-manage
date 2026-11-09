@@ -192,6 +192,36 @@ def add_folder(
     return {"project": _project_payload(updated)}
 
 
+@router.put("/projects/{project_id}/primary")
+def set_primary(
+    project_id: str,
+    path: str = Query(...),
+    profile: Optional[str] = Query(default=None),
+) -> dict:
+    """Change which folder is the project's primary (like the agent's set-primary)."""
+    pdb = _pdb()
+    if not (path or "").strip():
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="path is required")
+    db_path = _projects_db_path(profile)
+    try:
+        with pdb.connect_closing(db_path=db_path) as conn:
+            proj = pdb.get_project(conn, project_id)
+            if proj is None:
+                raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=f"no project {project_id}")
+            ok = pdb.set_primary(conn, project_id, path)
+            if not ok:
+                raise HTTPException(
+                    status_code=http_status.HTTP_400_BAD_REQUEST,
+                    detail=f"folder '{path}' not attached",
+                )
+            updated = pdb.get_project(conn, project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    if updated is None:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="project vanished")
+    return {"project": _project_payload(updated)}
+
+
 @router.delete("/projects/{project_id}/folders")
 def remove_folder(
     project_id: str,

@@ -122,6 +122,17 @@ class TestAddRemove(PluginApiTestCase):
             self._remove(pid, "/tmp/not-there")
         self.assertIn("not attached", str(ctx.exception))
 
+    def test_set_primary(self):
+        pid = self._create("Alpha", "/tmp/alpha", "/tmp/beta")
+        result = plugin_api.set_primary(pid, path="/tmp/beta", profile=None)
+        self.assertEqual(result["project"]["primary_path"], "/tmp/beta")
+
+    def test_set_primary_missing_folder(self):
+        pid = self._create("Alpha", "/tmp/alpha")
+        with self.assertRaises(Exception) as ctx:
+            plugin_api.set_primary(pid, path="/tmp/nope", profile=None)
+        self.assertIn("not attached", str(ctx.exception))
+
 
 class TestProfileIsolation(PluginApiTestCase):
     def test_projects_are_per_profile(self):
