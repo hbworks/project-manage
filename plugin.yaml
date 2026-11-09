@@ -8,3 +8,5 @@ description: >-
 author: masato
 provides_tools:
   - project_manage
+dashboard:
+  manifest: dashboard/manifest.json

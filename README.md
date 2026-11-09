@@ -8,19 +8,21 @@
 
 | 項目 | 内容 |
 |---|---|
-| 状態 | 開発中（P0 実装済み・テスト済み。登録は未） |
+| 状態 | 開発中（P0 実装済み・テスト済み。登録済み） |
 | version | 0.1.0 |
-| 最終コミット | （git init 前） |
-| 作業ツリー | — |
+| 最終コミット | `2026-11-10 1368915`（feat: P0 全アクション + 25 tests） |
+| 作業ツリー | clean |
 
 ## 実体と登録先
 
 | 項目 | 内容 |
 |---|---|
 | 実体パス | `このリポジトリ` |
-| git | 独立リポジトリ（未 init） |
-| 登録（symlink） | 未登録 |
-| 有効化 | 未（`config.yaml` の `plugins.enabled` / `platform_toolsets` 未設定） |
+| git | 独立リポジトリ（main, 初期コミット済み） |
+| 登録（symlink） | `~/.hermes/profiles/<name>/plugins/project-manage` → 実体 |
+| 有効化 | `config.yaml` の `plugins.enabled` + `platform_toolsets.*`（`hermes plugins enable` で自動設定） |
+
+> 補足: ツールプラグインはプロファイルごとの `plugins/` symlink が必要（デスクトップ UI プラグインの `~/.hermes/desktop-plugins/` とは別レイヤー。UI を持たない本プラグインは desktop-plugins 未使用）
 
 ## 提供する機能
 
@@ -57,9 +59,9 @@ PYTHONPATH=~/.hermes/hermes-agent \
 
 ## 次の一手
 
-- [ ] P1 実装は完了（folder 操作込み全アクション実装済み）
-- [ ] P2: git init + この README / SPEC のコミット
-- [ ] P3: symlink 登録（対象プロファイル）と `config.yaml` の `platform_toolsets`、実機で `hermes tools` / desktop から動作確認
+- [ ] 実機確認: 次セッションで `project_manage` ツールが使えることを確認（rename / archive の1回ずつ）
+- [ ] README の登録内容変更分をコミット
+- [ ] 必要になったら他プロファイルへ登録拡大（projects.db はプロファイルごと）
 
 ## メモ
 
