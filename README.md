@@ -29,10 +29,12 @@
 | 種別 | 名前 | 役割 |
 |---|---|---|
 | tool | `project_manage` | Projects の管理: list / rename / archive / restore / delete / add-folder / remove-folder / set-primary |
+| desktop UI | Folders ページ（`desktop/plugin.js`） | サイドバーに「フォルダ」ページを追加。プロジェクト選択 → フォルダ一覧 → 追加（path 入力）/ 削除（ボタン）。`/api/plugins/project-manage/*` 経由で同じ projects.db を操作 |
 
 - `delete` は **二段階**: `confirm` なしでは dry-run 結果のみを返し、実際の削除は `confirm=true` の再呼び出しが必要
 - 削除対象が active プロジェクトの場合は active ポインタを先にクリア
 - `switch` / `create` は本体ツールの役割を維持（重複しない）。セッションの workspace は動かさない
+- GUI の「フォルダを外す」は**プロジェクトからの関連付け解除のみ**で、ディスク上のファイルは消えない
 
 ## 設定・依存
 
@@ -44,23 +46,28 @@
 
 ```bash
 # repository root
+# Python（ツール + dashboard API）
 PYTHONPATH=~/.hermes/hermes-agent \
-  ~/.hermes/hermes-agent/venv/bin/python -m unittest discover -s tests -v
+  ~/.hermes/hermes-agent/venv/bin/python -m unittest discover -s tests -p "test_*.py" -v
+# Desktop UI helper（node）
+node --test tests/test_desktop_api.mjs
 ```
 
-- 結果: 25 tests OK
-- 最終実行: 2026-11-09（local 2026-11-10 00時台）
-- 注意: pytest は不要。unittest + Hermes venv python
+- 結果: Python 40 tests OK（ツール 25 + API 15） / node 4 tests OK
+- 最終実行: 2026-11-09（local 2026-11-10 01時台）
+- 注意: pytest は不要。unittest + Hermes venv python。Desktop は jsx()/jsxs() 形式なので JSX 構文に書き換えない
 
 ## 既知の課題
 
 - ツール名の衝突確認: `toolset="project_manage"` は自分自身の名前。GUI の既存 toolset リスト（`project` 等）と別系統なので衝突しない見込みだが、実機登録時に `hermes tools` で確認する
 - desktop UI の即時反映: DB 書き込み後のサイドバー反映は本体 UI の既存ロジックに依存（SPEC の非目的）
+- Desktop UI は `desktop/plugin.js` を Electron が `~/.hermes/desktop-plugins/project-manage/` へコピーする仕組み。コピー前に設定変更（`plugins.enabled` 等）は不要だが、デスクトップの再起動（または Rescan）が必要
+- GUI の「フォルダを外す」は関連付け解除のみ。ディスク削除は `terminal` の別操作
 
 ## 次の一手
 
-- [ ] 実機確認: 次セッションで `project_manage` ツールが使えることを確認（rename / archive の1回ずつ）
-- [ ] README の登録内容変更分をコミット
+- [ ] デスクトップ再起動後に Folders ページが出るか確認（`~/.hermes/desktop-plugins/project-manage/` にコピーされ、サイドバーに「フォルダ」が出るはず）
+- [ ] 実機確認: `project_manage` ツール + Folders ページの相互反映（GUI で追加 → ツールの list に出る、等）
 - [ ] 必要になったら他プロファイルへ登録拡大（projects.db はプロファイルごと）
 
 ## メモ
