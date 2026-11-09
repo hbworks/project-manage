@@ -54,7 +54,7 @@ PYTHONPATH=~/.hermes/hermes-agent \
 node --test tests/test_desktop_api.mjs
 ```
 
-- 結果: Python 40 tests OK（ツール 25 + API 15） / node 4 tests OK
+- 結果: Python 43 tests OK（ツール 25 + API 18） / node 4 tests OK
 - 最終実行: 2026-11-09（local 2026-11-10 01時台）
 - 注意: pytest は不要。unittest + Hermes venv python。Desktop は jsx()/jsxs() 形式なので JSX 構文に書き換えない
 
