@@ -18,7 +18,7 @@ import {
   ROUTES_AREA,
   SIDEBAR_NAV_AREA
 } from '@hermes/plugin-sdk'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 // =============================================================================
@@ -237,7 +237,12 @@ function FoldersPage() {
   const [projects, setProjects] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [versionErr, setVersionErr] = useState(null)
-  const profile = useMemo(() => (host && host.profileName ? host.profileName : ''), [])
+  // Resolve the focused profile the same way sqlite-memory does: the SDK host
+  // exposes it as an atom under host.state, not host.profileName. An empty
+  // profile would make the backend read the DEFAULT projects.db (0 projects).
+  const focusedProfileAtom = host.state?.focusedSessionProfile || host.state?.profile
+  const hostProfileName = useValue(focusedProfileAtom)
+  const profile = hostProfileName || ''
 
   const load = useCallback(async () => {
     try {
