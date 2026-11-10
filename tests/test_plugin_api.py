@@ -158,7 +158,7 @@ class TestProfileIsolation(PluginApiTestCase):
         prof_dir = Path(self.tmpdir) / "profiles" / "beta"
         prof_dir.mkdir(parents=True)
         with self.pdb.connect_closing(db_path=prof_dir / "projects.db") as conn:
-            self.pdb.create_project(conn, name="BetaProject", folders=["/tmp/a"])
+            self.pdb.create_project(conn, name="BetaProject", folders=["/tmp/b"])
 
         # Point HERMES_HOME at the profile subdir (like the plugin host does).
         self._old_home = os.environ.get("HERMES_HOME")

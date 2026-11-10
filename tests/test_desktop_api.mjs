@@ -92,7 +92,7 @@ test('without an explicit scope, the focused chat owner is the request scope', a
     host: {
       state: {
         focusedSessionOwner: {
-          get: () => ({ profile: 'gamma', connectionId: 'box' })
+          get: () => ({ profile: 'gamma', connectionId: 'conn-b' })
         }
       }
     }
@@ -101,7 +101,7 @@ test('without an explicit scope, the focused chat owner is the request scope', a
   await api('/projects?include_archived=true')
 
   assert.equal(request.profile, 'gamma')
-  assert.equal(request.connectionId, 'box')
+  assert.equal(request.connectionId, 'conn-b')
   assert.equal(request.path.includes('profile='), false)
 })
 
