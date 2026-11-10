@@ -3,7 +3,7 @@
   "label": "Folders",
   "description": "Backend API for the Hermes Desktop project folder management page.",
   "icon": "FolderOpened",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "tab": {
     "path": "/project-folders",
     "position": "after:skills",

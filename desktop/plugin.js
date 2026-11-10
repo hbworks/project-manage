@@ -7,8 +7,12 @@
  * per-profile projects.db through the core projects_db module — the same
  * store the agent's project_manage tool writes, so GUI and tool stay in sync.
  *
- * Minimal version: list + add + remove (no primary change, no rename).
+ * list + add + remove + set primary. Rename stays with the sidebar menu.
  * Rendering uses jsx()/jsxs() calls (react/jsx-runtime) — NOT JSX syntax.
+ *
+ * Routing follows the focused chat's owner (connectionId + profile), not a
+ * ?profile= query. Electron adds ?profile= itself when a shared backend needs
+ * it; a query we put on the path would stop that and drop the connection id.
  */
 
 import {
@@ -26,7 +30,8 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 // =============================================================================
 
 let _rest = null
-const DESKTOP_PLUGIN_VERSION = '0.1.0'
+let _os = null
+const DESKTOP_PLUGIN_VERSION = '0.1.1'
 const DESKTOP_API_CONTRACT_VERSION = 1
 
 const getLocale = () => {
@@ -46,35 +51,67 @@ function isDesktopApiIncompatible(profileContractVersion) {
     profileContractVersion !== DESKTOP_API_CONTRACT_VERSION
 }
 
+/** Drop a caller-supplied profile query so Electron owns that scope. */
+function stripProfileQuery(path) {
+  const q = path.indexOf('?')
+  if (q === -1) return path
+  const params = new URLSearchParams(path.slice(q + 1))
+  if (!params.has('profile')) return path
+  params.delete('profile')
+  const rest = params.toString()
+  return rest ? `${path.slice(0, q)}?${rest}` : path.slice(0, q)
+}
+
+/**
+ * Request scope for hermesDesktop.api. An explicit scope wins (tests);
+ * otherwise the focused chat's owner. Profile name alone is the compatibility
+ * ladder — the owner also carries connectionId. Empty when unresolved, so a
+ * call does not silently hit the default home.
+ */
+function ownerRequestScope(explicit) {
+  if (explicit && explicit.profile) {
+    const scope = { profile: String(explicit.profile) }
+    if (explicit.connectionId) scope.connectionId = String(explicit.connectionId)
+    return scope
+  }
+  if (typeof host === 'undefined' || !host?.state?.focusedSessionOwner?.get) return {}
+  const owner = host.state.focusedSessionOwner.get()
+  if (!owner || !owner.profile) return {}
+  const scope = { profile: String(owner.profile) }
+  if (owner.connectionId) scope.connectionId = String(owner.connectionId)
+  return scope
+}
+
 /**
  * バックエンド API 通信レイヤー
- * 1. Electron IPC (window.hermesDesktop.api)
- * 2. SDK ctx.rest
+ * 1. Electron IPC (window.hermesDesktop.api) — 所有者の profile と connectionId
+ * 2. SDK ctx.rest（周囲の範囲。所有者は渡せない）
  * 3. Browser fetch
  */
 async function api(path, options = {}) {
-  const cleanPath = path.startsWith('/') ? path : '/' + path
-  const profile = new URLSearchParams(cleanPath.split('?')[1] || '').get('profile')
-  const profileScope = profile ? { profile } : {}
+  const raw = path.startsWith('/') ? path : '/' + path
+  const cleanPath = stripProfileQuery(raw)
+  const { scope: explicitScope, ...rest } = options
+  const scope = ownerRequestScope(explicitScope)
 
   if (typeof window !== 'undefined' && window.hermesDesktop?.api) {
-    let body = options.body
+    let body = rest.body
     if (typeof body === 'string') {
       try { body = JSON.parse(body) } catch (_) {}
     }
-    const method = options.method || 'GET'
+    const method = rest.method || 'GET'
     return await window.hermesDesktop.api({
       path: `/api/plugins/project-manage${cleanPath}`,
       method,
       body,
-      ...profileScope
+      ...scope
     })
   }
 
   if (_rest) {
     try {
       const relPath = cleanPath.startsWith('/') ? cleanPath.slice(1) : cleanPath
-      return await _rest(relPath, options)
+      return await _rest(relPath, rest)
     } catch (e) {
       console.warn('ctx.rest failed, falling back to fetch:', e)
     }
@@ -85,10 +122,10 @@ async function api(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    ...(options.headers || {})
+    ...(rest.headers || {})
   }
   const fullUrl = cleanPath.startsWith('/api') ? cleanPath : `/api/plugins/project-manage${cleanPath}`
-  const requestOptions = { ...options, headers }
+  const requestOptions = { ...rest, headers }
   if (requestOptions.body && typeof requestOptions.body !== 'string') {
     try {
       requestOptions.body = JSON.stringify(requestOptions.body)
@@ -122,7 +159,8 @@ const t = {
   get removeConfirm() { return getLocale() === 'ja' ? 'このフォルダをプロジェクトから外しますか？（ディスクのファイルは消えません）' : 'Remove this folder from the project? (files on disk are untouched)' },
   get error() { return getLocale() === 'ja' ? 'エラー' : 'Error' },
   get refresh() { return getLocale() === 'ja' ? '更新' : 'Refresh' },
-  get incompatible() { return getLocale() === 'ja' ? 'API バージョン不一致' : 'API version mismatch' }
+  get incompatible() { return getLocale() === 'ja' ? 'API バージョン不一致' : 'API version mismatch' },
+  get noOwner() { return getLocale() === 'ja' ? '見ているチャットのプロファイルを特定できません' : 'Could not resolve the focused chat' }
 }
 
 // =============================================================================
@@ -141,7 +179,7 @@ function FolderList({ project, onChanged }) {
     setBusy(true)
     setErr(null)
     try {
-      await api(`/projects/${encodeURIComponent(project.id)}/folders?profile=${encodeURIComponent(project.profile || '')}`, {
+      await api(`/projects/${encodeURIComponent(project.id)}/folders`, {
         method: 'POST',
         body: { path: p }
       })
@@ -160,7 +198,7 @@ function FolderList({ project, onChanged }) {
     setBusy(true)
     setErr(null)
     try {
-      await api(`/projects/${encodeURIComponent(project.id)}/folders?path=${encodeURIComponent(path)}&profile=${encodeURIComponent(project.profile || '')}`, {
+      await api(`/projects/${encodeURIComponent(project.id)}/folders?path=${encodeURIComponent(path)}`, {
         method: 'DELETE'
       })
       onChanged()
@@ -175,7 +213,7 @@ function FolderList({ project, onChanged }) {
     setBusy(true)
     setErr(null)
     try {
-      await api(`/projects/${encodeURIComponent(project.id)}/primary?path=${encodeURIComponent(path)}&profile=${encodeURIComponent(project.profile || '')}`, {
+      await api(`/projects/${encodeURIComponent(project.id)}/primary?path=${encodeURIComponent(path)}`, {
         method: 'PUT'
       })
       onChanged()
@@ -186,17 +224,13 @@ function FolderList({ project, onChanged }) {
     }
   }
 
-  // OS-native folder picker through the desktop bridge (Electron
-  // showOpenDialog with openDirectory). Falls back to typing a path when the
-  // shell has no native picker (e.g. browser fallback).
+  // Official picker door. ctx.os.pickOpenPath wraps selectPaths and returns
+  // one path or null. Typing remains when the host has no picker.
   const browse = async () => {
-    if (typeof window === 'undefined' || !window.hermesDesktop?.selectPaths) return
-    try {
-      const picked = await window.hermesDesktop.selectPaths({ directories: true, multiple: false })
-      if (picked && picked[0]) setPathInput(picked[0])
-    } catch (e) {
-      setErr(String(e.message || e))
-    }
+    const pick = _os?.pickOpenPath
+    if (!pick) return
+    const picked = await pick({ directories: true })
+    if (picked) setPathInput(picked)
   }
 
   const folders = project.folders || []
@@ -221,7 +255,7 @@ function FolderList({ project, onChanged }) {
                 key: f.path,
                 style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid var(--border, rgba(128,128,128,0.2))', fontSize: '13px' },
                 children: [
-                  jsx(Codicon, { name: f.is_primary ? 'star-full' : 'star-outline', size: '0.9rem', style: { flexShrink: 0 } }),
+                  jsx(Codicon, { name: f.is_primary ? 'star-full' : 'star-empty', size: '0.9rem', style: { flexShrink: 0 } }),
                   jsx('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }, children: f.path }),
                   !f.is_primary ? jsx('button', {
                     type: 'button',
@@ -283,16 +317,22 @@ function FoldersPage() {
   const [projects, setProjects] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [versionErr, setVersionErr] = useState(null)
-  // Resolve the focused profile the same way sqlite-memory does: the SDK host
-  // exposes it as an atom under host.state, not host.profileName. An empty
-  // profile would make the backend read the DEFAULT projects.db (0 projects).
-  const focusedProfileAtom = host.state?.focusedSessionProfile || host.state?.profile
-  const hostProfileName = useValue(focusedProfileAtom)
-  const profile = hostProfileName || ''
+  // Official routing key is the focused chat's owner (connectionId + profile).
+  // The profile-only atom is the compatibility ladder and is not enough when
+  // two connections share a name. Null means unresolved — do not read the
+  // default projects.db.
+  const owner = useValue(host.state.focusedSessionOwner)
+  const ownerKey = owner && owner.profile ? `${owner.connectionId || ''}\n${owner.profile}` : ''
 
   const load = useCallback(async () => {
+    if (!ownerKey) {
+      setProjects(null)
+      setVersionErr(t.noOwner)
+      return
+    }
+    setVersionErr(null)
     try {
-      const data = await api(`/projects?include_archived=true&profile=${encodeURIComponent(profile)}`)
+      const data = await api('/projects?include_archived=true')
       setProjects(data.projects || [])
       setSelectedId((prev) => {
         if (prev && data.projects.some((p) => p.id === prev)) return prev
@@ -301,7 +341,7 @@ function FoldersPage() {
     } catch (e) {
       setVersionErr(String(e.message || e))
     }
-  }, [profile])
+  }, [ownerKey])
 
   useEffect(() => {
     void load()
@@ -367,7 +407,7 @@ function FoldersPage() {
       jsx('div', {
         style: { flex: 1, overflowY: 'auto', minWidth: 0 },
         children: selected
-          ? jsx(FolderList, { project: { ...selected, profile }, onChanged: () => void load() })
+          ? jsx(FolderList, { project: selected, onChanged: () => void load() })
           : jsx('div', { style: { padding: '24px', opacity: 0.55 }, children: t.selectProject })
       })
     ]
@@ -385,6 +425,7 @@ export default {
   defaultEnabled: true,
   register(ctx) {
     _rest = ctx.rest
+    _os = ctx.os || null
     return ctx.registerMany([
       {
         id: 'project-folders-page',

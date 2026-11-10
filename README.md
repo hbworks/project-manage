@@ -9,8 +9,8 @@
 | 項目 | 内容 |
 |---|---|
 | 状態 | 開発中（UI・API・ツールすべて実機確認済み） |
-| version | 0.1.0 |
-| 最終コミット | `2026-11-10 b71a027`（fix: API は HERMES_HOME から解決） |
+| version | 0.1.1 |
+| 最終コミット | 0.1.1（desktop UI を見ているチャットの所有者でルーティング） |
 | 作業ツリー | clean |
 
 ## 実体と登録先
@@ -23,7 +23,7 @@
 | 有効化 | `config.yaml` の `plugins.enabled`（`HERMES_HOME=~/.hermes hermes plugins enable` で実施） |
 | Desktop UI | `~/.hermes/desktop-plugins/project-manage/`（Electron が自動コピー） |
 
-> 補足: ツールプラグインはプロファイルごとの `plugins/` symlink が必要（デスクトップ UI プラグインの `~/.hermes/desktop-plugins/` とは別レイヤー。UI を持たない本プラグインは desktop-plugins 未使用）
+> 補足: ツールはプロファイルごとの `plugins/` symlink、デスクトップ UI は `~/.hermes/desktop-plugins/` へのコピー（再スキャンまたは再起動でソースから同期）。
 
 ## 提供する機能
 
@@ -54,7 +54,7 @@ PYTHONPATH=~/.hermes/hermes-agent \
 node --test tests/test_desktop_api.mjs
 ```
 
-- 結果: Python 43 tests OK（ツール 25 + API 18） / node 4 tests OK
+- 結果: Python 43 tests OK（ツール 25 + API 18） / node 6 tests OK
 - 最終実行: 2026-11-09（local 2026-11-10 01時台）
 - 注意: pytest は不要。unittest + Hermes venv python。Desktop は jsx()/jsxs() 形式なので JSX 構文に書き換えない
 
@@ -66,7 +66,7 @@ node --test tests/test_desktop_api.mjs
 ## 次の一手
 
 - [ ] 実運用で使ってみて、UI の細部（プロジェクト単体ページへの導線・並び順・ラベル表示）を調整
-- [ ] rename とプライマリ変更を UI に追加（最小版の次）
+- [x] プライマリ変更を UI に追加（rename はサイドバーメニューのまま）
 - [ ] 必要になったら他プロファイルへ登録拡大（projects.db はプロファイルごと。デフォルト symlink は済み）
 
 ## メモ
