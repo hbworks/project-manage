@@ -9,7 +9,7 @@
 | 項目 | 内容 |
 |---|---|
 | 状態 | 開発中（UI・API・ツールは実装済み） |
-| version | 0.1.3（`plugin.yaml` / `dashboard/manifest.json` / `desktop/plugin.js` の `DESKTOP_PLUGIN_VERSION`） |
+| version | 0.1.4（`plugin.yaml` / `dashboard/manifest.json` / `desktop/plugin.js` の `DESKTOP_PLUGIN_VERSION`） |
 | 実装の基準 | `900c46d`（desktop UI を見ているチャットの所有者でルーティング） |
 
 ## 提供する機能
@@ -26,8 +26,8 @@
 - GUI の「フォルダを外す」は**プロジェクトからの関連付け解除のみ**で、ディスク上のファイルは消えない
 - GUI の追加はパスの手入力か、OS のフォルダ選択（`ctx.os.pickOpenPath`、ディレクトリのみ）。追加ボディは `{path}` だけで、label は付けない
 - GUI はパスに `?profile=` を付けない。見ているチャットの所有者（profile と connectionId）を `hermesDesktop.api` に渡す。所有者を特定できないときは default の DB を読まず、エラーを出す
-- 互換フォールバック（`ctx.rest` / `fetch`）は所有者をフィールドで運べないため、profile を `?profile=` のオーバーライドとして付ける。ここでも所有者を特定できないときは、ホスト既定の DB に書かずに失敗させる
-- 所有者が切り替わったら、新しい一覧が届くまで旧所有者の一覧を隠す。表示中の一覧と操作先の所有者が食い違わないための措置で、古い応答は破棄する
+- 互換フォールバック（`ctx.rest` / `fetch`）は所有者をフィールドで運べないため、profile を `?profile=` のオーバーライドとして付ける。ここでも所有者を特定できないときは、ホスト既定の DB に書かずに失敗させる。ただしこの経路は profile しか伝えられず、同名プロファイルを持つ複数接続を区別できない（Electron 経路は connectionId も渡す）
+- 所有者が切り替わったら、新しい一覧が届くまで旧所有者の一覧を隠す。描画時点で「表示中の一覧の所有者 ≠ 現在の所有者」なら一覧を出さない同期ガードで、effect の実行を待たない。古い応答は破棄し、操作時のスコープも一覧を作った所有者に固定する
 - GUI のプライマリ変更は行頭の星（☆）クリック。プライマリの行は星（★）が塗られ、クリック不可
 - API 契約バージョンは 1（`GET /contract` の `desktop_api_contract_version`）。UI 側の定数と整数で食い違うときはページを出さない
 
@@ -49,7 +49,7 @@ PYTHONPATH=~/.hermes/hermes-agent \
 node --test tests/test_desktop_api.mjs
 ```
 
-- 結果: Python 43 tests OK（ツール 25 + API 18） / node 12 tests OK
-- 最終実行: 2026-11-12 00:10 JST
+- 結果: Python 43 tests OK（ツール 25 + API 18） / node 13 tests OK
+- 最終実行: 2026-11-12 00:40 JST
 - 注意: pytest は不要。unittest + Hermes venv python。Desktop は jsx()/jsxs() 形式なので JSX 構文に書き換えない
 

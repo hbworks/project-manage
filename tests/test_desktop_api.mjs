@@ -6,6 +6,11 @@ import vm from 'node:vm'
 const pluginSource = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8')
 
 function loadApi(bridge, extra = {}) {
+  return loadHelpers({ window: { hermesDesktop: { api: bridge } }, ...extra }).api
+}
+
+/** Load the render-time helpers together with api() from the same slice. */
+function loadHelpers(extra = {}) {
   const start = pluginSource.indexOf('let _rest = null')
   const end = pluginSource.indexOf('\nconst t = {', start)
   assert.notEqual(start, -1, 'plugin API helper exists')
@@ -14,10 +19,13 @@ function loadApi(bridge, extra = {}) {
   const context = vm.createContext({
     URLSearchParams,
     console,
-    window: { hermesDesktop: { api: bridge } },
+    window: { hermesDesktop: { api: null } },
     ...extra
   })
-  return vm.runInContext(`${pluginSource.slice(start, end)}\napi`, context)
+  return vm.runInContext(
+    `${pluginSource.slice(start, end)}\n({ api, foldersViewState })`,
+    context
+  )
 }
 
 const scope = { scope: { profile: 'alpha', connectionId: 'conn-a' } }
@@ -190,14 +198,33 @@ test('ctx.rest fallback also goes through the scoped path', () => {
   assert.doesNotMatch(register, /const relPath = cleanPath/)
 })
 
-test('switching owner hides the previous list and drops stale responses', () => {
-  const page = pluginSource.slice(pluginSource.indexOf('function FoldersPage'))
-  // a switch clears the list before the request resolves
-  assert.match(page, /const switching = loadedOwnerKey\.current !== ownerKey/)
-  assert.match(page, /if \(switching\) \{[\s\S]*?setProjects\(null\)/)
-  // responses from a superseded request are ignored
-  assert.match(page, /const seq = \+\+loadSeq\.current/)
-  assert.match(page, /if \(loadSeq\.current !== seq\) return/)
-  // server data is only adopted for the owner the response was requested for
-  assert.match(page, /loadedOwnerKey\.current = ownerKey/)
+test('a list belonging to another owner is never rendered (render-time guard)', () => {
+  const { foldersViewState } = loadHelpers()
+  const listA = [{ id: 'p_a' }]
+
+  // The owner just changed (A -> B) and state still holds A's projects: the very
+  // next render must hide them, before any effect runs.
+  assert.equal(foldersViewState(listA, 'conn-b\nbeta', 'conn-a\nalpha', null), 'loading')
+  // Same owner: the list stays visible (a refresh must not blank it).
+  assert.equal(foldersViewState(listA, 'conn-a\nalpha', 'conn-a\nalpha', null), 'list')
+  // Nothing loaded yet.
+  assert.equal(foldersViewState(null, 'conn-a\nalpha', null, null), 'loading')
+  // Unresolved owner fails closed instead of reading the default DB.
+  assert.equal(foldersViewState(null, '', null, 'owner unknown'), 'error')
+  // A real error for the current owner still wins over an empty list.
+  assert.equal(foldersViewState(null, 'conn-a\nalpha', 'conn-a\nalpha', 'boom'), 'error')
+})
+
+test('the page renders through the guard and pins the list owner scope', () => {
+  assert.match(
+    pluginSource,
+    /foldersViewState\(projects, ownerKey, loadedOwnerKey\.current, versionErr\)/
+  )
+  const page = pluginSource.slice(pluginSource.indexOf('function FolderList'))
+  assert.match(page, /function FolderList\(\{ project, onChanged, scope \}\)/)
+  const callSite = page.slice(0, page.indexOf('const folders = project.folders'))
+  // add / remove / setPrimary each send the scope of the list on screen
+  assert.equal((callSite.match(/\n\s+scope\n/g) || []).length, 3)
+  // and the page hands that pinned scope down
+  assert.match(pluginSource, /project: selected, scope: loadedOwnerScope\.current/)
 })

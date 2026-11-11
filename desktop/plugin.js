@@ -31,7 +31,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 
 let _rest = null
 let _os = null
-const DESKTOP_PLUGIN_VERSION = '0.1.3'
+const DESKTOP_PLUGIN_VERSION = '0.1.4'
 const DESKTOP_API_CONTRACT_VERSION = 1
 
 const getLocale = () => {
@@ -89,6 +89,19 @@ function withProfileQuery(path, profile) {
 }
 
 /**
+ * Which view the page must show. Evaluated during render, not from an effect:
+ * the frame right after an owner change still holds the previous owner's
+ * projects in state, and that list must never be visible (or clickable) while
+ * the request scope already points at the new owner.
+ */
+function foldersViewState(projects, ownerKey, loadedOwnerKey, versionErr) {
+  if (projects !== null && loadedOwnerKey !== ownerKey) return 'loading'
+  if (versionErr) return 'error'
+  if (projects === null) return 'loading'
+  return 'list'
+}
+
+/**
  * バックエンド API 通信レイヤー
  * 1. Electron IPC (window.hermesDesktop.api) — 所有者の profile と connectionId
  * 2. SDK ctx.rest（所有者フィールドは渡せない → ?profile= で明示指定）
@@ -120,6 +133,10 @@ async function api(path, options = {}) {
 
   // Compat paths cannot carry the owner as a field, so fail closed when the
   // focused chat's profile is unknown instead of touching the host's default DB.
+  // Known limitation: only `profile` can travel here. A connectionId is not
+  // part of the override contract, so when two connections share a profile name
+  // this path cannot tell them apart (the Electron path sends both). The pinned
+  // scope from the page keeps reads and writes on the same profile regardless.
   if (!scope.profile) {
     const message = (typeof t !== 'undefined' && t && t.noOwner) || 'Could not resolve the focused chat'
     const err = new Error(message)
@@ -186,7 +203,7 @@ const t = {
 // 3. ページ
 // =============================================================================
 
-function FolderList({ project, onChanged }) {
+function FolderList({ project, onChanged, scope }) {
   const [adding, setAdding] = useState(false)
   const [pathInput, setPathInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -200,7 +217,8 @@ function FolderList({ project, onChanged }) {
     try {
       await api(`/projects/${encodeURIComponent(project.id)}/folders`, {
         method: 'POST',
-        body: { path: p }
+        body: { path: p },
+        scope
       })
       setPathInput('')
       setAdding(false)
@@ -218,7 +236,8 @@ function FolderList({ project, onChanged }) {
     setErr(null)
     try {
       await api(`/projects/${encodeURIComponent(project.id)}/folders?path=${encodeURIComponent(path)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        scope
       })
       onChanged()
     } catch (e) {
@@ -233,7 +252,8 @@ function FolderList({ project, onChanged }) {
     setErr(null)
     try {
       await api(`/projects/${encodeURIComponent(project.id)}/primary?path=${encodeURIComponent(path)}`, {
-        method: 'PUT'
+        method: 'PUT',
+        scope
       })
       onChanged()
     } catch (e) {
@@ -349,21 +369,30 @@ function FoldersPage() {
   // 所有者が変わったら一覧を隠し、古い応答は捨てる（表示中の一覧に対する
   // 操作は、必ずその一覧を作った所有者に対して行われる）。
   const loadedOwnerKey = useRef(null)
+  // Scope pinned to the list that is on screen. Operations carry it, so even a
+  // request that slipped through during a switch targets the profile the data
+  // came from, never the newly focused one.
+  const loadedOwnerScope = useRef(null)
   const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current
     if (!ownerKey) {
       loadedOwnerKey.current = null
+      loadedOwnerScope.current = null
       setProjects(null)
       setSelectedId(null)
       setVersionErr(t.noOwner)
       return
     }
+    const scopeForOwner = { profile: String(owner.profile) }
+    if (owner.connectionId) scopeForOwner.connectionId = String(owner.connectionId)
     const switching = loadedOwnerKey.current !== ownerKey
     if (switching) {
       // Hide the previous owner's list before the request; otherwise a click in
       // that window would be routed to the new owner with the old project id.
+      // (The same mismatch is also checked during render — this only keeps the
+      // state consistent for the next frame.)
       setProjects(null)
       setSelectedId(null)
       setVersionErr(null)
@@ -372,6 +401,7 @@ function FoldersPage() {
       const data = await api('/projects?include_archived=true')
       if (loadSeq.current !== seq) return
       loadedOwnerKey.current = ownerKey
+      loadedOwnerScope.current = scopeForOwner
       setVersionErr(null)
       setProjects(data.projects || [])
       setSelectedId((prev) => {
@@ -381,6 +411,7 @@ function FoldersPage() {
     } catch (e) {
       if (loadSeq.current !== seq) return
       loadedOwnerKey.current = null
+      loadedOwnerScope.current = null
       setProjects(null)
       setSelectedId(null)
       setVersionErr(String(e.message || e))
@@ -405,11 +436,13 @@ function FoldersPage() {
     return () => { cancelled = true }
   }, [])
 
-  if (versionErr) {
+  const view = foldersViewState(projects, ownerKey, loadedOwnerKey.current, versionErr)
+
+  if (view === 'error') {
     return jsx('div', { style: { padding: '24px', color: 'var(--vscode-errorForeground, #f14c4c)' }, children: versionErr })
   }
 
-  if (projects === null) {
+  if (view === 'loading') {
     return jsx('div', { style: { padding: '24px', opacity: 0.6 }, children: t.loading })
   }
 
@@ -451,7 +484,7 @@ function FoldersPage() {
       jsx('div', {
         style: { flex: 1, overflowY: 'auto', minWidth: 0 },
         children: selected
-          ? jsx(FolderList, { project: selected, onChanged: () => void load() })
+          ? jsx(FolderList, { project: selected, scope: loadedOwnerScope.current, onChanged: () => void load() })
           : jsx('div', { style: { padding: '24px', opacity: 0.55 }, children: t.selectProject })
       })
     ]
