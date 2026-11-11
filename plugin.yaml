@@ -1,6 +1,6 @@
 name: project-manage
 label: Project Management (整理・管理)
-version: 0.1.5
+version: 0.1.6
 description: >-
   Manage desktop Projects (named workspaces): rename, archive/restore, delete,
   folder ops (add/remove/set-primary), list including archived. Thin wrapper

@@ -115,10 +115,15 @@ def _project_payload(proj) -> dict:
     primary = proj.primary_path or next(
         (f.path for f in proj.folders if f.is_primary), proj.folders[0].path if proj.folders else None
     )
+    # icon/color are optional columns (desktop project menu). Pass them through so
+    # the Folders page can show the same icon Desktop's own project list shows;
+    # both are None when unset, and the UI applies its own default.
     return {
         "id": proj.id,
         "slug": proj.slug,
         "name": proj.name,
+        "icon": getattr(proj, "icon", None) or None,
+        "color": getattr(proj, "color", None) or None,
         "primary_path": primary,
         "archived": bool(proj.archived),
         "folders": [f.to_dict() for f in proj.folders],

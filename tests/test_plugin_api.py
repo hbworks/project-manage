@@ -89,6 +89,26 @@ class TestList(PluginApiTestCase):
         self.assertEqual(proj["name"], "Alpha")
         self.assertEqual(len(proj["folders"]), 1)
 
+    def test_project_icon_and_color_are_passed_through(self):
+        # The Folders page renders the same icon Desktop's project list shows,
+        # so the API has to carry the project's own icon/color.
+        with self.pdb.connect_closing(db_path=self.tmpdir / "projects.db") as conn:
+            pid = self.pdb.create_project(
+                conn, name="Styled", folders=["/tmp/styled"],
+                icon="rocket", color="hsl(210 80% 60%)",
+            )
+        proj = plugin_api.get_project(pid)["project"]
+        self.assertEqual(proj["icon"], "rocket")
+        self.assertEqual(proj["color"], "hsl(210 80% 60%)")
+
+    def test_project_without_icon_reports_null(self):
+        # Unset icon/color must be null (not ""): the UI applies its own default
+        # only when the value is empty.
+        self._create("Plain", "/tmp/plain")
+        proj = self._list()["projects"][0]
+        self.assertIsNone(proj["icon"])
+        self.assertIsNone(proj["color"])
+
 
 class TestAddRemove(PluginApiTestCase):
     def test_add_folder(self):

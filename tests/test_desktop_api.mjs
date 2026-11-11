@@ -23,7 +23,7 @@ function loadHelpers(extra = {}) {
     ...extra
   })
   return vm.runInContext(
-    `${pluginSource.slice(start, end)}\n({ api, foldersViewState })`,
+    `${pluginSource.slice(start, end)}\n({ api, foldersViewState, projectRowIcon })`,
     context
   )
 }
@@ -246,6 +246,29 @@ test('an explicit scope wins over a focus change mid-request', async () => {
 
   assert.equal(request.profile, 'alpha')
   assert.equal(request.connectionId, 'conn-a')
+})
+
+test('project rows show the project icon, like Desktop, not a fixed one', () => {
+  const { projectRowIcon } = loadHelpers()
+
+  // Unconfigured project -> the same default Desktop's project list uses.
+  assert.deepEqual({ ...projectRowIcon({ icon: null, color: null }) }, { name: 'folder-library', color: null })
+  assert.deepEqual({ ...projectRowIcon({}) }, { name: 'folder-library', color: null })
+
+  // A project with its own icon keeps it (and its accent color).
+  assert.deepEqual(
+    { ...projectRowIcon({ icon: 'rocket', color: 'hsl(210 80% 60%)' }) },
+    { name: 'rocket', color: 'hsl(210 80% 60%)' }
+  )
+
+  // Blank strings behave like "unset"; color without icon stays null-safe.
+  assert.deepEqual({ ...projectRowIcon({ icon: '  ', color: '' }) }, { name: 'folder-library', color: null })
+  assert.deepEqual({ ...projectRowIcon({ icon: 'repo', color: '  ' }) }, { name: 'repo', color: null })
+
+  // The row uses the helper instead of a hardcoded icon.
+  assert.match(pluginSource, /const rowIcon = projectRowIcon\(p\)/)
+  assert.match(pluginSource, /name: rowIcon\.name/)
+  assert.doesNotMatch(pluginSource, /name: 'rocket'/)
 })
 
 test('the page renders through the guard and pins the list owner scope', () => {

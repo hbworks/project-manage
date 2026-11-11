@@ -31,7 +31,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 
 let _rest = null
 let _os = null
-const DESKTOP_PLUGIN_VERSION = '0.1.5'
+const DESKTOP_PLUGIN_VERSION = '0.1.6'
 const DESKTOP_API_CONTRACT_VERSION = 1
 
 const getLocale = () => {
@@ -99,6 +99,22 @@ function foldersViewState(projects, ownerKey, loadedOwnerKey, versionErr) {
   if (versionErr) return 'error'
   if (projects === null) return 'loading'
   return 'list'
+}
+
+/**
+ * Row icon for a project in the Folders page.
+ *
+ * Desktop itself renders a project row as `icon || 'folder-library'` (see its
+ * project list / command palette), so mirroring that keeps the page from
+ * inventing an icon: an unconfigured project shows the folder icon, a project
+ * with a chosen icon (and color) keeps it here too.
+ */
+const DEFAULT_PROJECT_ICON = 'folder-library'
+
+function projectRowIcon(project) {
+  const icon = project && typeof project.icon === 'string' ? project.icon.trim() : ''
+  const color = project && typeof project.color === 'string' ? project.color.trim() : ''
+  return { name: icon || DEFAULT_PROJECT_ICON, color: color || null }
 }
 
 /**
@@ -464,8 +480,9 @@ function FoldersPage() {
           jsx('div', { style: { padding: '8px 10px', fontSize: '11px', textTransform: 'uppercase', opacity: 0.55, letterSpacing: '0.06em' }, children: t.pageTitle }),
           projects.length === 0
             ? jsx('div', { style: { padding: '12px', fontSize: '13px', opacity: 0.55 }, children: t.noProjects })
-            : projects.map((p) =>
-                jsxs('div', {
+            : projects.map((p) => {
+                const rowIcon = projectRowIcon(p)
+                return jsxs('div', {
                   key: p.id,
                   role: 'button',
                   tabIndex: 0,
@@ -478,13 +495,17 @@ function FoldersPage() {
                     color: 'var(--foreground, inherit)'
                   },
                   children: [
-                    jsx(Codicon, { name: 'rocket', size: '0.95rem', style: { flexShrink: 0 } }),
+                    jsx(Codicon, {
+                      name: rowIcon.name,
+                      size: '0.95rem',
+                      style: rowIcon.color ? { flexShrink: 0, color: rowIcon.color } : { flexShrink: 0 }
+                    }),
                     jsx('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: p.name }),
                     jsx('span', { style: { marginLeft: 'auto', fontSize: '11px', opacity: 0.5, flexShrink: 0 }, children: String((p.folders || []).length) })
                   ]
                 })
-              )
-        ]
+              })
+          ]
       }),
       // 右カラム: フォルダ管理
       jsx('div', {
