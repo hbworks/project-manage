@@ -215,6 +215,39 @@ test('a list belonging to another owner is never rendered (render-time guard)', 
   assert.equal(foldersViewState(null, 'conn-a\nalpha', 'conn-a\nalpha', 'boom'), 'error')
 })
 
+test('the list request carries the same scope it is recorded under', () => {
+  const load = pluginSource.slice(
+    pluginSource.indexOf('const load = useCallback'),
+    pluginSource.indexOf('}, [ownerKey])')
+  )
+  assert.match(
+    load,
+    /await api\('\/projects\?include_archived=true', \{ scope: scopeForOwner \}\)/
+  )
+  // recorded owner comes from the request scope, not a fresh read of the atom
+  assert.match(load, /const scopeKey = `\$\{scopeForOwner\.connectionId \|\| ''\}\\n\$\{scopeForOwner\.profile\}`/)
+  assert.match(load, /loadedOwnerKey\.current = scopeKey/)
+  assert.doesNotMatch(load, /loadedOwnerKey\.current = ownerKey/)
+})
+
+test('an explicit scope wins over a focus change mid-request', async () => {
+  let request
+  const api = loadApi(async (value) => {
+    request = value
+    return { projects: [] }
+  }, {
+    host: {
+      state: { focusedSessionOwner: { get: () => ({ profile: 'gamma', connectionId: 'conn-b' }) } }
+    }
+  })
+
+  // the caller pinned alpha before the focus moved to gamma
+  await api('/projects?include_archived=true', scope)
+
+  assert.equal(request.profile, 'alpha')
+  assert.equal(request.connectionId, 'conn-a')
+})
+
 test('the page renders through the guard and pins the list owner scope', () => {
   assert.match(
     pluginSource,

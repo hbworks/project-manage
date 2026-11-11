@@ -31,7 +31,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 
 let _rest = null
 let _os = null
-const DESKTOP_PLUGIN_VERSION = '0.1.4'
+const DESKTOP_PLUGIN_VERSION = '0.1.5'
 const DESKTOP_API_CONTRACT_VERSION = 1
 
 const getLocale = () => {
@@ -387,6 +387,9 @@ function FoldersPage() {
     }
     const scopeForOwner = { profile: String(owner.profile) }
     if (owner.connectionId) scopeForOwner.connectionId = String(owner.connectionId)
+    // Record the list against the scope it was requested with, not against a
+    // second derivation of the owner — one source for "what this list is".
+    const scopeKey = `${scopeForOwner.connectionId || ''}\n${scopeForOwner.profile}`
     const switching = loadedOwnerKey.current !== ownerKey
     if (switching) {
       // Hide the previous owner's list before the request; otherwise a click in
@@ -398,9 +401,12 @@ function FoldersPage() {
       setVersionErr(null)
     }
     try {
-      const data = await api('/projects?include_archived=true')
+      // Fetch with the owner captured above, so the request target and the
+      // owner recorded below can never diverge (a switch mid-flight would
+      // otherwise let ownerRequestScope resolve a different profile).
+      const data = await api('/projects?include_archived=true', { scope: scopeForOwner })
       if (loadSeq.current !== seq) return
-      loadedOwnerKey.current = ownerKey
+      loadedOwnerKey.current = scopeKey
       loadedOwnerScope.current = scopeForOwner
       setVersionErr(null)
       setProjects(data.projects || [])

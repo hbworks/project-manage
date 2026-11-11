@@ -9,7 +9,7 @@
 | 項目 | 内容 |
 |---|---|
 | 状態 | 開発中（UI・API・ツールは実装済み） |
-| version | 0.1.4（`plugin.yaml` / `dashboard/manifest.json` / `desktop/plugin.js` の `DESKTOP_PLUGIN_VERSION`） |
+| version | 0.1.5（`plugin.yaml` / `dashboard/manifest.json` / `desktop/plugin.js` の `DESKTOP_PLUGIN_VERSION`） |
 | 実装の基準 | `900c46d`（desktop UI を見ているチャットの所有者でルーティング） |
 
 ## 提供する機能
@@ -49,7 +49,7 @@ PYTHONPATH=~/.hermes/hermes-agent \
 node --test tests/test_desktop_api.mjs
 ```
 
-- 結果: Python 43 tests OK（ツール 25 + API 18） / node 13 tests OK
-- 最終実行: 2026-11-12 00:40 JST
+- 結果: Python 43 tests OK（ツール 25 + API 18） / node 15 tests OK
+- 最終実行: 2026-11-12 01:05 JST
 - 注意: pytest は不要。unittest + Hermes venv python。Desktop は jsx()/jsxs() 形式なので JSX 構文に書き換えない
 
