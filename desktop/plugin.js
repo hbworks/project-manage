@@ -22,7 +22,7 @@ import {
   ROUTES_AREA,
   SIDEBAR_NAV_AREA
 } from '@hermes/plugin-sdk'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 // =============================================================================
@@ -31,7 +31,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 
 let _rest = null
 let _os = null
-const DESKTOP_PLUGIN_VERSION = '0.1.2'
+const DESKTOP_PLUGIN_VERSION = '0.1.3'
 const DESKTOP_API_CONTRACT_VERSION = 1
 
 const getLocale = () => {
@@ -82,11 +82,21 @@ function ownerRequestScope(explicit) {
   return scope
 }
 
+/** Attach the owner profile as an explicit override query (compat paths only). */
+function withProfileQuery(path, profile) {
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}profile=${encodeURIComponent(profile)}`
+}
+
 /**
  * バックエンド API 通信レイヤー
  * 1. Electron IPC (window.hermesDesktop.api) — 所有者の profile と connectionId
- * 2. SDK ctx.rest（周囲の範囲。所有者は渡せない）
- * 3. Browser fetch
+ * 2. SDK ctx.rest（所有者フィールドは渡せない → ?profile= で明示指定）
+ * 3. Browser fetch（同上）
+ *
+ * 2/3 は所有者をフィールドで運べないので、profile をクエリのオーバーライドとして
+ * 渡す（plugin_api 側が検証して使う）。所有者を解決できないときは、ホスト既定の
+ * DB に書いてしまうより失敗させる。
  */
 async function api(path, options = {}) {
   const raw = path.startsWith('/') ? path : '/' + path
@@ -108,9 +118,19 @@ async function api(path, options = {}) {
     })
   }
 
+  // Compat paths cannot carry the owner as a field, so fail closed when the
+  // focused chat's profile is unknown instead of touching the host's default DB.
+  if (!scope.profile) {
+    const message = (typeof t !== 'undefined' && t && t.noOwner) || 'Could not resolve the focused chat'
+    const err = new Error(message)
+    err.code = 'NO_OWNER_SCOPE'
+    throw err
+  }
+  const scopedPath = withProfileQuery(cleanPath, scope.profile)
+
   if (_rest) {
     try {
-      const relPath = cleanPath.startsWith('/') ? cleanPath.slice(1) : cleanPath
+      const relPath = scopedPath.startsWith('/') ? scopedPath.slice(1) : scopedPath
       return await _rest(relPath, rest)
     } catch (e) {
       console.warn('ctx.rest failed, falling back to fetch:', e)
@@ -124,7 +144,7 @@ async function api(path, options = {}) {
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...(rest.headers || {})
   }
-  const fullUrl = cleanPath.startsWith('/api') ? cleanPath : `/api/plugins/project-manage${cleanPath}`
+  const fullUrl = scopedPath.startsWith('/api') ? scopedPath : `/api/plugins/project-manage${scopedPath}`
   const requestOptions = { ...rest, headers }
   if (requestOptions.body && typeof requestOptions.body !== 'string') {
     try {
@@ -325,22 +345,44 @@ function FoldersPage() {
   // default projects.db.
   const owner = useValue(host.state.focusedSessionOwner)
   const ownerKey = owner && owner.profile ? `${owner.connectionId || ''}\n${owner.profile}` : ''
+  // どの所有者のデータを表示中か / どのリクエストが最新か。
+  // 所有者が変わったら一覧を隠し、古い応答は捨てる（表示中の一覧に対する
+  // 操作は、必ずその一覧を作った所有者に対して行われる）。
+  const loadedOwnerKey = useRef(null)
+  const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     if (!ownerKey) {
+      loadedOwnerKey.current = null
       setProjects(null)
+      setSelectedId(null)
       setVersionErr(t.noOwner)
       return
     }
-    setVersionErr(null)
+    const switching = loadedOwnerKey.current !== ownerKey
+    if (switching) {
+      // Hide the previous owner's list before the request; otherwise a click in
+      // that window would be routed to the new owner with the old project id.
+      setProjects(null)
+      setSelectedId(null)
+      setVersionErr(null)
+    }
     try {
       const data = await api('/projects?include_archived=true')
+      if (loadSeq.current !== seq) return
+      loadedOwnerKey.current = ownerKey
+      setVersionErr(null)
       setProjects(data.projects || [])
       setSelectedId((prev) => {
         if (prev && data.projects.some((p) => p.id === prev)) return prev
         return (data.projects[0] && data.projects[0].id) || null
       })
     } catch (e) {
+      if (loadSeq.current !== seq) return
+      loadedOwnerKey.current = null
+      setProjects(null)
+      setSelectedId(null)
       setVersionErr(String(e.message || e))
     }
   }, [ownerKey])

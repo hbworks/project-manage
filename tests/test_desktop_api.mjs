@@ -6,7 +6,7 @@ import vm from 'node:vm'
 const pluginSource = readFileSync(new URL('../desktop/plugin.js', import.meta.url), 'utf8')
 
 function loadApi(bridge, extra = {}) {
-  const start = pluginSource.indexOf('function stripProfileQuery')
+  const start = pluginSource.indexOf('let _rest = null')
   const end = pluginSource.indexOf('\nconst t = {', start)
   assert.notEqual(start, -1, 'plugin API helper exists')
   assert.notEqual(end, -1, 'plugin API helper ends before translations')
@@ -128,4 +128,76 @@ test('an unresolved owner adds no profile, so the caller can fail closed', async
   assert.equal(request.profile, undefined)
   assert.equal(request.connectionId, undefined)
   assert.equal(request.path, '/api/plugins/project-manage/contract')
+})
+
+test('fetch fallback carries the owner profile as a ?profile= override', async () => {
+  let seen
+  const api = loadApi(null, {
+    window: {},
+    fetch: async (url, opts) => {
+      seen = { url, opts }
+      return { ok: true, json: async () => ({ projects: [] }) }
+    },
+    host: {
+      state: { focusedSessionOwner: { get: () => ({ profile: 'beta', connectionId: 'conn-b' }) } }
+    }
+  })
+
+  await api('/projects?include_archived=true')
+
+  assert.equal(
+    seen.url,
+    '/api/plugins/project-manage/projects?include_archived=true&profile=beta'
+  )
+})
+
+test('a caller-supplied profile query never wins over the owner on fallback paths', async () => {
+  let seen
+  const api = loadApi(null, {
+    window: {},
+    fetch: async (url) => {
+      seen = url
+      return { ok: true, json: async () => ({ project: { id: 'p_1', folders: [] } }) }
+    },
+    host: {
+      state: { focusedSessionOwner: { get: () => ({ profile: 'beta' }) } }
+    }
+  })
+
+  await api('/projects/p_1/folders?path=%2Ftmp%2Fbeta&profile=other', { method: 'DELETE' })
+
+  assert.equal(
+    seen,
+    '/api/plugins/project-manage/projects/p_1/folders?path=%2Ftmp%2Fbeta&profile=beta'
+  )
+})
+
+test('fallback paths fail closed when the owner is unresolved', async () => {
+  let called = false
+  const api = loadApi(null, {
+    window: {},
+    fetch: async () => { called = true; return { ok: true, json: async () => ({}) } },
+    host: { state: { focusedSessionOwner: { get: () => null } } }
+  })
+
+  await assert.rejects(api('/projects?include_archived=true'), (e) => e.code === 'NO_OWNER_SCOPE')
+  assert.equal(called, false, 'no request is sent without a resolved owner')
+})
+
+test('ctx.rest fallback also goes through the scoped path', () => {
+  const register = pluginSource.slice(pluginSource.indexOf('async function api'))
+  assert.match(register, /const relPath = scopedPath\.startsWith\('\/'\)/)
+  assert.doesNotMatch(register, /const relPath = cleanPath/)
+})
+
+test('switching owner hides the previous list and drops stale responses', () => {
+  const page = pluginSource.slice(pluginSource.indexOf('function FoldersPage'))
+  // a switch clears the list before the request resolves
+  assert.match(page, /const switching = loadedOwnerKey\.current !== ownerKey/)
+  assert.match(page, /if \(switching\) \{[\s\S]*?setProjects\(null\)/)
+  // responses from a superseded request are ignored
+  assert.match(page, /const seq = \+\+loadSeq\.current/)
+  assert.match(page, /if \(loadSeq\.current !== seq\) return/)
+  // server data is only adopted for the owner the response was requested for
+  assert.match(page, /loadedOwnerKey\.current = ownerKey/)
 })
