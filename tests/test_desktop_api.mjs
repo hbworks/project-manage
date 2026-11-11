@@ -33,6 +33,15 @@ test('plugin registers a Folders page and sidebar nav item', () => {
   assert.doesNotMatch(pluginSource, /hermesDesktop\?\.selectPaths/)
 })
 
+test('the row star, not a text button, switches the primary folder', () => {
+  // star-empty renders inside a clickable button wired to setPrimary
+  assert.match(pluginSource, /name: 'star-empty'/)
+  assert.match(pluginSource, /onClick: \(\) => setPrimary\(f\.path\)/)
+  // the "set primary" text button and its label are gone
+  assert.doesNotMatch(pluginSource, /children: t\.setPrimary\b/)
+  assert.doesNotMatch(pluginSource, /get setPrimary\(\)/)
+})
+
 test('API helper sends owner scope as request fields, not a profile query', async () => {
   let request
   const api = loadApi(async value => {

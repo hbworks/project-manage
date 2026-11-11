@@ -31,7 +31,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 
 let _rest = null
 let _os = null
-const DESKTOP_PLUGIN_VERSION = '0.1.1'
+const DESKTOP_PLUGIN_VERSION = '0.1.2'
 const DESKTOP_API_CONTRACT_VERSION = 1
 
 const getLocale = () => {
@@ -153,7 +153,6 @@ const t = {
   get pathPlaceholder() { return getLocale() === 'ja' ? '例: /Users/you/dev/repo' : 'e.g. /Users/you/dev/repo' },
   get add() { return getLocale() === 'ja' ? '追加' : 'Add' },
   get remove() { return getLocale() === 'ja' ? '外す' : 'Remove' },
-  get setPrimary() { return getLocale() === 'ja' ? 'プライマリに' : 'Set primary' },
   get setPrimaryTitle() { return getLocale() === 'ja' ? 'このフォルダをプライマリに設定' : 'Make this the primary folder' },
   get browse() { return getLocale() === 'ja' ? '選択…' : 'Browse…' },
   get removeConfirm() { return getLocale() === 'ja' ? 'このフォルダをプロジェクトから外しますか？（ディスクのファイルは消えません）' : 'Remove this folder from the project? (files on disk are untouched)' },
@@ -255,16 +254,19 @@ function FolderList({ project, onChanged }) {
                 key: f.path,
                 style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid var(--border, rgba(128,128,128,0.2))', fontSize: '13px' },
                 children: [
-                  jsx(Codicon, { name: f.is_primary ? 'star-full' : 'star-empty', size: '0.9rem', style: { flexShrink: 0 } }),
+                  f.is_primary
+                    ? jsx(Codicon, { name: 'star-full', size: '0.9rem', style: { flexShrink: 0 } })
+                    : jsx('button', {
+                        type: 'button',
+                        disabled: busy,
+                        title: t.setPrimaryTitle,
+                        'aria-label': t.setPrimaryTitle,
+                        onClick: () => setPrimary(f.path),
+                        style: { flexShrink: 0, display: 'inline-flex', alignItems: 'center', padding: 0, background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', opacity: 0.6 },
+                        children: jsx(Codicon, { name: 'star-empty', size: '0.9rem' })
+                      }),
                   jsx('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }, children: f.path }),
-                  !f.is_primary ? jsx('button', {
-                    type: 'button',
-                    disabled: busy,
-                    title: t.setPrimaryTitle,
-                    onClick: () => setPrimary(f.path),
-                    style: { flexShrink: 0, background: 'transparent', border: 'none', padding: '2px 6px', fontSize: '12px', cursor: 'pointer', color: 'inherit', opacity: 0.6 },
-                    children: t.setPrimary
-                  }) : jsx('span', { style: { fontSize: '11px', opacity: 0.55, flexShrink: 0 }, children: t.primary }),
+                  f.is_primary ? jsx('span', { style: { fontSize: '11px', opacity: 0.55, flexShrink: 0 }, children: t.primary }) : null,
                   jsx('button', {
                     type: 'button',
                     disabled: busy,
